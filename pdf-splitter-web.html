@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Splitter</title>
+    <!-- 
+    PDF Splitter Web Interface
+    Written by Jonas Lund 2024
+
+    Description:
+    This web application splits a PDF file into multiple smaller PDF files of approximately equal size.
+    The application runs entirely in the browser using client-side JavaScript, so no server is needed.
+    
+    Requirements:
+    - A modern web browser
+    - JavaScript enabled
+    - pdf-lib library (automatically loaded from CDN)
+    
+    How to use:
+    1. Open this HTML file in a web browser
+    2. Click "Select PDF file" to choose your PDF
+    3. Enter the number of pieces you want to split the PDF into
+    4. Click "Split PDF"
+    5. Each part will automatically download to your computer
+    
+    Output:
+    - Creates separate PDF files named part_1.pdf, part_2.pdf, etc.
+    - Original file remains unchanged
+    - Each part contains an approximately equal number of pages
+    
+    Note: Large PDF files may take longer to process since all processing happens in the browser.
+    -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <style>
+        :root {
+            --primary: #BB86FC;
+            --primary-variant: #3700B3;
+            --secondary: #03DAC6;
+            --background: #121212;
+            --surface: #1E1E1E;
+            --error: #CF6679;
+            --on-primary: #000000;
+            --on-background: #FFFFFF;
+            --on-surface: #FFFFFF;
+            --on-error: #000000;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--background);
+            color: var(--on-background);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: var(--surface);
+            padding: 32px;
+            border-radius: 16px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 600px;
+            margin: 20px;
+        }
+
+        h1 {
+            color: var(--primary);
+            margin-bottom: 16px;
+            font-weight: 500;
+        }
+
+        p {
+            margin-bottom: 24px;
+            opacity: 0.87;
+        }
+
+        .input-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--on-surface);
+            opacity: 0.87;
+            font-weight: 500;
+        }
+
+        input[type="number"] {
+            background-color: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--on-surface);
+            padding: 12px 16px;
+            border-radius: 4px;
+            width: 100%;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="number"]:focus {
+            border-color: var(--primary);
+            outline: none;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-input-label {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            width: 100%;
+            text-align: center;
+        }
+
+        .file-input-label:hover {
+            background-color: rgba(255, 255, 255, 0.08);
+        }
+
+        button {
+            background-color: var(--primary);
+            color: var(--on-primary);
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            width: 100%;
+            text-transform: uppercase;
+            letter-spacing: 1.25px;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+
+        button:hover {
+            background-color: #CBB2FC;
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            background-color: rgba(187, 134, 252, 0.38);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #status {
+            margin-top: 24px;
+            padding: 16px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .success {
+            background-color: rgba(3, 218, 198, 0.1);
+            color: var(--secondary);
+        }
+
+        .error {
+            background-color: rgba(207, 102, 121, 0.1);
+            color: var(--error);
+        }
+
+        .progress {
+            margin-top: 24px;
+            color: var(--primary);
+            text-align: center;
+            display: none;
+        }
+
+        .author {
+            text-align: center;
+            margin-top: 24px;
+            color: var(--on-surface);
+            opacity: 0.6;
+        }
+
+        /* Material Design Ripple Effect */
+        button {
+            position: relative;
+            overflow: hidden;
+        }
+
+        button:after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 5px;
+            height: 5px;
+            background: rgba(255, 255, 255, .5);
+            opacity: 0;
+            border-radius: 100%;
+            transform: scale(1, 1) translate(-50%);
+            transform-origin: 50% 50%;
+        }
+
+        @keyframes ripple {
+            0% {
+                transform: scale(0, 0);
+                opacity: 0.5;
+            }
+            100% {
+                transform: scale(100, 100);
+                opacity: 0;
+            }
+        }
+
+        button:focus:not(:active)::after {
+            animation: ripple 1s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PDF Splitter</h1>
+        <p>Split your PDF into multiple parts of equal size.</p>
+        
+        <div class="input-group">
+            <label for="pdfFile">Select PDF file</label>
+            <input type="file" id="pdfFile" accept=".pdf" />
+            <label for="pdfFile" class="file-input-label" id="fileLabel">Choose a PDF file</label>
+        </div>
+        
+        <div class="input-group">
+            <label for="numParts">Number of parts to split into</label>
+            <input type="number" id="numParts" min="2" value="2" />
+        </div>
+        
+        <button onclick="splitPDF()" id="splitButton">Split PDF</button>
+        
+        <div id="status"></div>
+        <div class="progress" id="progress"></div>
+        
+        <div class="author">
+            <p>Written by Jonas Lund 2024</p>
+        </div>
+    </div>
+
+    <script>
+        // Update file input label when file is selected
+        document.getElementById('pdfFile').addEventListener('change', function(e) {
+            const fileName = e.target.files[0]?.name || 'Choose a PDF file';
+            document.getElementById('fileLabel').textContent = fileName;
+        });
+
+        async function splitPDF() {
+            const fileInput = document.getElementById('pdfFile');
+            const numParts = parseInt(document.getElementById('numParts').value);
+            const statusDiv = document.getElementById('status');
+            const splitButton = document.getElementById('splitButton');
+            const progressDiv = document.getElementById('progress');
+
+            // Validation
+            if (!fileInput.files[0]) {
+                showStatus('Please select a PDF file.', 'error');
+                return;
+            }
+            if (numParts < 2) {
+                showStatus('Please enter a number greater than 1.', 'error');
+                return;
+            }
+
+            try {
+                splitButton.disabled = true;
+                progressDiv.style.display = 'block';
+                progressDiv.textContent = 'Loading PDF...';
+
+                // Read the PDF file
+                const pdfBytes = await fileInput.files[0].arrayBuffer();
+                const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+                const totalPages = pdfDoc.getPageCount();
+                
+                // Calculate pages per part
+                const pagesPerPart = Math.ceil(totalPages / numParts);
+                
+                // Create and download each part
+                for (let i = 0; i < numParts; i++) {
+                    progressDiv.textContent = `Creating part ${i + 1} of ${numParts}...`;
+                    
+                    const newPdf = await PDFLib.PDFDocument.create();
+                    const startPage = i * pagesPerPart;
+                    const endPage = Math.min((i + 1) * pagesPerPart, totalPages);
+                    
+                    // Copy pages to new document
+                    const pages = await newPdf.copyPages(pdfDoc, Array.from(
+                        {length: endPage - startPage}, 
+                        (_, index) => startPage + index
+                    ));
+                    pages.forEach(page => newPdf.addPage(page));
+                    
+                    // Save and download the new PDF
+                    const newPdfBytes = await newPdf.save();
+                    downloadPDF(newPdfBytes, `part_${i + 1}.pdf`);
+                }
+
+                showStatus(
+                    `Successfully split PDF into ${numParts} parts!`,
+                    'success'
+                );
+            } catch (error) {
+                showStatus(
+                    `Error splitting PDF: ${error.message}`,
+                    'error'
+                );
+            } finally {
+                splitButton.disabled = false;
+                progressDiv.style.display = 'none';
+            }
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = type;
+        }
+
+        function downloadPDF(bytes, filename) {
+            const blob = new Blob([bytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
